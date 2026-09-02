@@ -15,7 +15,7 @@
 #define TARGET 500 // In ml
 #define CYCLES 10
 #define RETRIES 5
-#define DELAY 30000
+#define DELAY 60
 long i = 0;
 long SpinCounter = 0;
 bool isCounting = false;
@@ -457,7 +457,7 @@ void loop(){
     Serial.println(j+1);
     Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
     Serial.flush(); // force the buffer out fully before anything else executes
-    deepSleepSecs(60); // 30 second delay between cycles - no sleep for now
+    deepSleepSecs(DELAY); // 30 second delay between cycles - no sleep for now
 
   }
   Serial.println("Finished Pumping");
