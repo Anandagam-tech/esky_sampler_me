@@ -31,6 +31,106 @@ ISR(WDT_vect) {
   wdt_disable();
 }
 
+void deepSleepSecs(int32_t seconds) {
+  // 1. Turn off the ADC (Analog-to-Digital Converter) to save power
+  //    You won't be reading sensors while sleeping anyway
+  ADCSRA &= ~(1 << ADEN);
+
+  // 2. Sleep in 8-second chunks (maximum single watchdog interval)
+  while (seconds >= 8) {
+    seconds -= 8;
+
+    // Arm the watchdog timer for 8 seconds in INTERRUPT mode
+    wdt_enable(WDTO_8S);
+    WDTCSR |= (1 << WDIE);  // Enable interrupt mode (not reset mode)
+
+    // Configure and enter deepest sleep mode
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    sleep_cpu();  // <-- CPU STOPS HERE
+
+    // --- CPU wakes up here after 8 seconds ---
+    sleep_disable();
+    wdt_disable();
+
+    // Manually add 8000ms to the Arduino's clock so millis() stays accurate
+    cli();
+    timer0_millis += 8000;
+    sei();
+  }
+
+  // 3. Sleep in 4-second chunks for remaining time
+  while (seconds >= 4) {
+    seconds -= 4;
+
+    wdt_enable(WDTO_4S);
+    WDTCSR |= (1 << WDIE);
+
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    sleep_cpu();
+
+    sleep_disable();
+    wdt_disable();
+
+    cli();
+    timer0_millis += 4000;
+    sei();
+  }
+
+  // 4. Sleep in 1-second chunks for any leftover seconds
+  while (seconds >= 1) {
+    seconds -= 1;
+
+    wdt_enable(WDTO_1S);
+    WDTCSR |= (1 << WDIE);
+
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleep_enable();
+    sleep_cpu();
+
+    sleep_disable();
+    wdt_disable();
+
+    cli();
+    timer0_millis += 1000;
+    sei();
+  }
+
+  // 5. Re-enable the ADC so analogRead() works again after waking
+  ADCSRA |= (1 << ADEN);
+}
+
+void xDelay(uint32_t ms) {
+  // Flush serial so messages don't get cut off
+  if (Serial) {
+    Serial.flush();
+  }
+
+  // Calculate how many 64ms slices we can fit
+  uint32_t slices = ms / 64;
+
+  // Slow the CPU clock down by 64x (16MHz -> 250kHz)
+  // This reduces power consumption dramatically during short waits
+  clock_prescale_set(clock_div_64);
+
+  // Wait for the reduced time (because clock is 64x slower, 
+  // delay(1) actually takes 64ms of real time)
+  delay(slices);
+
+  // Restore CPU clock to full speed
+  clock_prescale_set(clock_div_1);
+
+  // Manually fix the Arduino's internal clock (millis)
+  // because slowing the CPU also slowed down millis()
+  cli();  // Disable interrupts briefly to safely edit the timer
+  timer0_millis += 63 * slices;  // Add back the "lost" time
+  sei();  // Re-enable interrupts
+
+  // Handle any remaining milliseconds that didn't fit into 64ms slices
+  delay(ms - 64 * slices);
+}
+
 bool Retries(){
   digitalWrite(SWA, LOW);
   digitalWrite(PUMP_FWD_PIN, LOW);
@@ -40,9 +140,9 @@ bool Retries(){
  
   for(int i = 0; i < RETRIES; i++){
     SpinMeRev(revolutions);
-    delay(5000);
+    xDelay(5);
     SpinMe(revolutions/4);
-    delay(5000);
+    xDelay(5);
     SpinMeRev(revolutions);
     unsigned long anotherTime = millis();
     analogWrite(SPEED, FWD);
@@ -113,7 +213,6 @@ long Rinse(){
       }
       else{
         Serial.print("Problem!");
-        delay(10000);
         exit(0);
       }
     }
@@ -131,7 +230,7 @@ long Rinse(){
   Serial.print("Rev: ");
   RevCounter += 2;
   Serial.println(RevCounter);
-  delay(5000);
+  xDelay(3);
   SpinCounter = 0;
   return (millis() - StartTime);
 
@@ -174,7 +273,7 @@ int NoOfRevolutions() {
   Serial.print("Rev: ");
   RevCounter += 2;
   Serial.println(RevCounter);
-  delay(5000);
+  xDelay(3);
   rinseTime = millis() - startTime;
   return RevCounter;
 }
@@ -333,7 +432,7 @@ void setup(){
   Serial.println("GetMinsMaxs Started: ");
   GetMinsMaxs();
   Serial.println("GetMinsMaxs Ended: ");
-  delay(2000);
+  xDelay(2);
   Serial.println("NoOfRevolutions Started: ");
   revolutions = NoOfRevolutions();
   Serial.println("NoOfRevolutions Ended: ");
@@ -344,11 +443,11 @@ void loop(){
   for (int j = 0; j < CYCLES; j++){
     Serial.print("Cycle Started: ");
     SpinMeRev(2*revolutions);
-    delay(5000);
+    xDelay(5);
     Rinse();
-    delay(5000);
+    xDelay(5);
     SpinMeRev(2*revolutions);
-    delay(5000);
+    xDelay(5);
     Rinse();
     SpinMe((int)((TARGET/CYCLES)/ML_PER_REV));
     SpinMeRev(2*revolutions);
@@ -358,7 +457,7 @@ void loop(){
     Serial.println(j+1);
     Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
     Serial.flush(); // force the buffer out fully before anything else executes
-    delay(DELAY); // 30 second delay between cycles - no sleep for now
+    deepSleepSecs(60); // 30 second delay between cycles - no sleep for now
 
   }
   Serial.println("Finished Pumping");
