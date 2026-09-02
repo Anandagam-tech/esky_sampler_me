@@ -23,6 +23,13 @@ double MinVal,MaxVal;
 double MagneticStrength;
 int revolutions;
 unsigned long rinseTime = 0;
+extern volatile unsigned long timer0_millis;
+
+ISR(WDT_vect) {
+  // This function runs automatically when the watchdog timer expires.
+  // Its ONLY job is to prevent a system reset and wake the CPU.
+  wdt_disable();
+}
 
 bool Retries(){
   digitalWrite(SWA, LOW);
