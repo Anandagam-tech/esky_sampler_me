@@ -1,98 +1,263 @@
-#define PUMP_FWD_PIN           2
-#define PUMP_REV_PIN           3
+#include <avr/sleep.h>    
+#include <avr/power.h>    
+#include <avr/wdt.h>      
+#include <MCP7940.h>
+#define BAUDRATE 9600
+#define PUMP_REV_PIN           2
+#define PUMP_FWD_PIN           3
+#define SWA 67
+#define SPEED 13
 #define XKC_SENSOR_PIN         4
 #define HALL_SENSOR_PIN        A9
-#define SPEED 13
-#define SWA 67
-#define BAUDRATE 9600
-#define NumberOfSpins 5
-#define PumpEveryXMins 1
-#define DurationOfRun 12
+#define FWD 255
+#define REV 255
 #define ML_PER_REV 0.799
-#define TARGET 500
+#define TARGET 500 // In ml
 #define CYCLES 10
-#define MIN 255 // Forward Speed;
-#define MAX 255
-unsigned long startTime = 0;
+#define RETRIES 5
+#define DELAY 30000
+long i = 0;
+long SpinCounter = 0;
 bool isCounting = false;
-bool sensor1 = false;
 double MinVal,MaxVal;
 double MagneticStrength;
-long i,SpinCounter;
-long TimeTakenToSpinMe;
-double DelayTime;
-double HallWakeSig;
-int Purge_Rinse_Rev;
-#include <avr/power.h>
-#include <avr/wdt.h>
-#include <MCP7940.h>
-extern volatile unsigned long timer0_millis;
+int revolutions;
+unsigned long rinseTime = 0;
 
-void setup() {
-  wdt_disable();
-  Serial.begin(BAUDRATE);
-  pinMode(PUMP_FWD_PIN, OUTPUT);
-  pinMode(PUMP_REV_PIN, OUTPUT);
-  pinMode(SWA, OUTPUT);
-  pinMode(SPEED, OUTPUT);
+bool Retries(){
   digitalWrite(SWA, LOW);
   digitalWrite(PUMP_FWD_PIN, LOW);
   digitalWrite(PUMP_REV_PIN, LOW);
-  pinMode(HALL_SENSOR_PIN, INPUT);
-  pinMode(XKC_SENSOR_PIN, INPUT);
   digitalWrite(HALL_SENSOR_PIN, LOW);
-  digitalWrite(XKC_SENSOR_PIN, HIGH);
-  Serial.println("GetMinsMaxs Started: ");
-  GetMinsMaxs();
-  Serial.println("GetMinsMaxs Ended: ");
-  delay(2000);
-  Serial.println("NoOfRevolutions Started: ");
-  Purge_Rinse_Rev = NoOfRevolutions(); // Check this line 
-  Serial.println("Let's Start this");
+  digitalWrite(XKC_SENSOR_PIN, LOW);
+ 
+  for(int i = 0; i < RETRIES; i++){
+    SpinMeRev(revolutions);
+    delay(5000);
+    SpinMe(revolutions/4);
+    delay(5000);
+    SpinMeRev(revolutions);
+    unsigned long anotherTime = millis();
+    analogWrite(SPEED, FWD);
+    digitalWrite(PUMP_FWD_PIN, HIGH);
+    digitalWrite(SWA, HIGH);
+    delay(25);
+    digitalWrite(HALL_SENSOR_PIN, HIGH);
+    digitalWrite(XKC_SENSOR_PIN, HIGH);
+    int RevCounter = 0;
+    while((millis() - anotherTime) < rinseTime){
+      MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+      MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+      if (MagneticStrength > (MaxVal - 1)){
+        RevCounter += 1;
+        do{
+          MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+          MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+        } while (MagneticStrength > (MinVal + 1));
+      }
+      delay(1);
 
+      if(digitalRead(XKC_SENSOR_PIN) == 1){
+        digitalWrite(SWA, LOW);
+        digitalWrite(PUMP_FWD_PIN, LOW);
+        digitalWrite(PUMP_REV_PIN, LOW);
+        digitalWrite(HALL_SENSOR_PIN, LOW);
+        digitalWrite(XKC_SENSOR_PIN, LOW);
+        
+        return true;
+      }
 
-}
-
-void loop() {
-  int j;
-  for (j=0; j < CYCLES; j++){
-    Serial.println("Started the cycle.");
-    int Time1 = SpinMeRev(2*Purge_Rinse_Rev);
-    Serial.println("Purge");
-    int Time2 = rinse();
-    Serial.println("Rinse");
-    int Time3 = SpinMeRev(2*Purge_Rinse_Rev);
-    Serial.println("Purge");
-    int Time4 = rinse();
-    Serial.println("Rinse");
-    int Time5 = SpinMe((int)((TARGET/CYCLES)/ML_PER_REV));
-    Serial.println("Sampling Done.");
-    int Time6 = SpinMeRev(Purge_Rinse_Rev*2);
-    delay(80); // let the power rail settle after the pump decelerates before more serial writes
-    Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
-    Serial.println("Cycle Ended");
-    Serial.print("Cycle Done: ");
-    Serial.println(j+1);
-    Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
-    Serial.flush(); // force the buffer out fully before anything else executes
-    delay(30000); // 30 second delay between cycles - no sleep for now
+    }
   }
-  Serial.println("Finished Pumping");
-  Serial.print("Analog Reading: ");
-  Serial.println(digitalRead(XKC_SENSOR_PIN));
-  Serial.print("Done Target: ");
-  Serial.println(TARGET);
-  delay(100000);
+  return false;
+}
+
+long Rinse(){
+  unsigned long StartTime = millis();
+  Serial.println("Rinsing Time Baby!");
+  analogWrite(SPEED, FWD);
+  digitalWrite(PUMP_FWD_PIN, HIGH);
+  digitalWrite(SWA, HIGH);
+  digitalWrite(HALL_SENSOR_PIN, HIGH);
+  digitalWrite(XKC_SENSOR_PIN, HIGH);
+  int RevCounter = 0;
+
+  while (digitalRead(XKC_SENSOR_PIN) == 0) {
+    MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+    MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+    
+    // If the magnet is detected (strength is higher than Max threshold)
+    if (MagneticStrength > (MaxVal - 1)) {
+      RevCounter += 1; // Increment your revolution count
+      
+      // Wait in this small loop until the magnet moves away
+      // This ensures one physical spin = exactly one count
+      do {
+        MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+      } while (MagneticStrength > (MinVal + 1));
+    }
+
+    if(((millis() - StartTime) > (2 * rinseTime)) || RevCounter > (2 * revolutions)){
+      bool answer = Retries();
+      if (answer == true){
+        StartTime = millis();
+        RevCounter = 0;
+      }
+      else{
+        Serial.print("Problem!");
+        delay(10000);
+        exit(0);
+      }
+    }
+        
+    delay(1);
+  }
+  
+  // 3. SHUTDOWN AND RETURN
+  digitalWrite(PUMP_FWD_PIN, LOW);
+  digitalWrite(HALL_SENSOR_PIN, LOW);
+  digitalWrite(SWA, LOW);
+  digitalWrite(XKC_SENSOR_PIN, LOW);
+  
+  Serial.println("Caliberation Done Baby!");
+  Serial.print("Rev: ");
+  RevCounter += 2;
+  Serial.println(RevCounter);
+  delay(5000);
+  SpinCounter = 0;
+  return (millis() - StartTime);
 
 }
-void GetMinsMaxs(){
-      //this function gets the maximum and minimum values for the hall effect sensor in its current environment as the motor spins around. these values are then used to
-      //determine cut off thresholds during the main program. This function is only called once, when the unit powers on.
+
+int NoOfRevolutions() {
+  unsigned long startTime = millis();
+  Serial.println("Caliberation Time Baby!");
+  analogWrite(SPEED, REV);
+  digitalWrite(PUMP_REV_PIN, HIGH);
+  digitalWrite(SWA, HIGH);
+  digitalWrite(HALL_SENSOR_PIN, HIGH);
+  
+  int RevCounter = 0;
+
+  while (digitalRead(XKC_SENSOR_PIN) == 0) {
+    MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+    MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+    
+    // If the magnet is detected (strength is higher than Max threshold)
+    if (MagneticStrength > (MaxVal - 1)) {
+      RevCounter += 1; // Increment your revolution count
       
-      Serial.println("Calibrating peristaltic pump sensor");
-      //turn motor on
-      analogWrite(SPEED, MAX);
+      // Wait in this small loop until the magnet moves away
+      // This ensures one physical spin = exactly one count
+      do {
+        MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
+        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
+      } while (MagneticStrength > (MinVal + 1));
+    }
+        
+    delay(1);
+  }
+  
+  // 3. SHUTDOWN AND RETURN
+  digitalWrite(PUMP_REV_PIN, LOW);
+  digitalWrite(HALL_SENSOR_PIN, LOW);
+  digitalWrite(SWA, LOW);
+  Serial.println("Caliberation Done Baby!");
+  Serial.print("Rev: ");
+  RevCounter += 2;
+  Serial.println(RevCounter);
+  delay(5000);
+  rinseTime = millis() - startTime;
+  return RevCounter;
+}
+
+long SpinMe(int SpinTimes){
+      long StartTime;
+      StartTime = millis();
+      analogWrite(SPEED, FWD);
       digitalWrite(PUMP_FWD_PIN, HIGH);
+      digitalWrite(SWA, HIGH);
+      delay(250);
+      digitalWrite(HALL_SENSOR_PIN, HIGH);
+      while (SpinCounter < SpinTimes){
+        MagneticStrength = analogRead(HALL_SENSOR_PIN)*1.0;
+        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
+        if(MagneticStrength > (MaxVal-1)){
+          SpinCounter += 1;
+          Serial.print(SpinCounter);
+          Serial.print(": ");
+          Serial.println(MagneticStrength);
+        
+          do{
+            MagneticStrength = analogRead(HALL_SENSOR_PIN);
+            MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
+          }while(MagneticStrength > (MinVal+1));
+        
+        }
+        
+        delay(1);
+      }
+      digitalWrite(PUMP_FWD_PIN, LOW);
+      digitalWrite(HALL_SENSOR_PIN, LOW);
+      digitalWrite(SWA, LOW);
+
+      SpinCounter = 0;
+      return (millis() - StartTime);
+    }
+    long SpinMeRev(int SpinTimes){
+      unsigned long StartTime;
+      StartTime = millis();
+      analogWrite(SPEED, REV);
+      digitalWrite(PUMP_REV_PIN, HIGH);
+      digitalWrite(SWA, HIGH);
+      delay(50);
+      digitalWrite(HALL_SENSOR_PIN, HIGH);
+      while (SpinCounter < SpinTimes){
+        MagneticStrength = analogRead(HALL_SENSOR_PIN)*1.0;
+        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
+        if(MagneticStrength > (MaxVal-1)){
+          SpinCounter += 1;
+          // digitalWrite(PUMP_FWD_PIN, LOW);
+          // digitalWrite(SWA, LOW);
+          // digitalWrite(HALL_SENSOR_PIN, LOW);
+          // delay(500);
+          // digitalWrite(PUMP_FWD_PIN, HIGH);
+          // digitalWrite(SWA, HIGH);
+          // delay(50);
+          // digitalWrite(HALL_SENSOR_PIN, HIGH);
+
+          Serial.print(SpinCounter);
+          Serial.print(": ");
+          Serial.println(MagneticStrength);
+        
+          do{
+            MagneticStrength = analogRead(HALL_SENSOR_PIN);
+            MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
+          }while(MagneticStrength > (MinVal+1));
+        
+        }
+        
+        delay(1);
+      }
+      digitalWrite(PUMP_REV_PIN, LOW);
+      digitalWrite(HALL_SENSOR_PIN, LOW);
+      digitalWrite(SWA, LOW);
+
+      SpinCounter = 0;
+      return (millis() - StartTime);
+    }
+
+
+
+void GetMinsMaxs(){
+  //this function gets the maximum and minimum values for the hall effect sensor in its current environment as the motor spins around. these values are then used to
+  //determine cut off thresholds during the main program. This function is only called once, when the unit powers on.
+    
+    Serial.println("Calibrating peristaltic pump sensor");
+    //turn motor on
+      analogWrite(SPEED, REV);
+      digitalWrite(PUMP_REV_PIN, HIGH);
       digitalWrite(SWA, HIGH);
       delay(250);
       //turn sensor on
@@ -128,251 +293,71 @@ void GetMinsMaxs(){
             Serial.println(MaxVal);
             Serial.println(MinVal);
       //turn motor off
-      digitalWrite(PUMP_FWD_PIN,LOW);
+      digitalWrite(PUMP_REV_PIN,LOW);
       
       //turn sensor off
       digitalWrite(HALL_SENSOR_PIN,LOW);
       digitalWrite(SWA, LOW);
 
       //delay for 100 milliseconds
-      delay(3000);
+      delay(100);
       
       //spin the device twice to initiate the sampler
       SpinMe(2);
       
       Serial.println("Finished calibrating peristaltic pump sensor");
-      delay(3000);
-    }
 
-    long SpinMe(int SpinTimes){
-      long StartTime;
-      StartTime = millis();
-      analogWrite(SPEED, MIN);
-      digitalWrite(PUMP_REV_PIN, HIGH);
-      digitalWrite(SWA, HIGH);
-      digitalWrite(HALL_SENSOR_PIN, HIGH);
-      while (SpinCounter < SpinTimes){
-        MagneticStrength = analogRead(HALL_SENSOR_PIN)*1.0;
-        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-        if(MagneticStrength > (MaxVal-1)){
-          SpinCounter += 1;
-          Serial.print(SpinCounter);
-          Serial.print(": ");
-          Serial.println(MagneticStrength);
-        
-          do{
-            MagneticStrength = analogRead(HALL_SENSOR_PIN);
-            MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-          }while(MagneticStrength > (MinVal+1));
-        
-        }
-        
-        delay(1);
-      }
-      digitalWrite(PUMP_REV_PIN, LOW);
-      digitalWrite(HALL_SENSOR_PIN, LOW);
-      digitalWrite(SWA, LOW);
-
-      SpinCounter = 0;
-      return (millis() - StartTime);
-    }
-
-    long SpinMeRev(int SpinTimes){
-      long StartTime;
-      StartTime = millis();
-      analogWrite(SPEED, MAX);
-      digitalWrite(PUMP_FWD_PIN, HIGH);
-      digitalWrite(SWA, HIGH);
-      delay(50);
-      digitalWrite(HALL_SENSOR_PIN, HIGH);
-      while (SpinCounter < SpinTimes){
-        MagneticStrength = analogRead(HALL_SENSOR_PIN)*1.0;
-        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-        if(MagneticStrength > (MaxVal-1)){
-          SpinCounter += 1;
-          // digitalWrite(PUMP_FWD_PIN, LOW);
-          // digitalWrite(SWA, LOW);
-          // digitalWrite(HALL_SENSOR_PIN, LOW);
-          // delay(500);
-          // digitalWrite(PUMP_FWD_PIN, HIGH);
-          // digitalWrite(SWA, HIGH);
-          // delay(50);
-          // digitalWrite(HALL_SENSOR_PIN, HIGH);
-
-          Serial.print(SpinCounter);
-          Serial.print(": ");
-          Serial.println(MagneticStrength);
-        
-          do{
-            MagneticStrength = analogRead(HALL_SENSOR_PIN);
-            MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-          }while(MagneticStrength > (MinVal+1));
-        
-        }
-        
-        delay(1);
-      }
-      digitalWrite(PUMP_FWD_PIN, LOW);
-      digitalWrite(HALL_SENSOR_PIN, LOW);
-      digitalWrite(SWA, LOW);
-
-      SpinCounter = 0;
-      return (millis() - StartTime);
-    }
-
-int NoOfRevolutions() {
-  Serial.println("Caliberation Time Baby!");
-  digitalWrite(PUMP_REV_PIN, HIGH);
-  digitalWrite(SWA, HIGH);
-  digitalWrite(HALL_SENSOR_PIN, HIGH);
-  int RevCounter = 0;
-
-  while (digitalRead(4) == 0) {
-    MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
-    MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
-    
-    // If the magnet is detected (strength is higher than Max threshold)
-    if (MagneticStrength > (MaxVal - 1)) {
-      RevCounter += 1; // Increment your revolution count
-      
-      // Wait in this small loop until the magnet moves away
-      // This ensures one physical spin = exactly one count
-      do {
-        MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
-        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
-      } while (MagneticStrength > (MinVal + 1));
-    }
-        
-    delay(1);
-  }
-  
-  // 3. SHUTDOWN AND RETURN
-  digitalWrite(PUMP_REV_PIN, LOW);
-  digitalWrite(HALL_SENSOR_PIN, LOW);
-  digitalWrite(SWA, LOW);
-  Serial.println("Caliberation Done Baby!");
-  Serial.print("Rev: ");
-  RevCounter += 2;
-  Serial.println(RevCounter);
-  delay(5000);
-
-  return RevCounter;
 }
 
-// Bare-metal sleep replacement from Radar code
-void deepSleepSecs(int32_t sec) {
-  // Turn off Analog-to-Digital Converter (ADC) to save power
-  ADCSRA &= ~(1 << ADEN);
-
-  while (sec >= 4) {
-    sec -= 4;
-    wdt_enable(WDTO_4S);
-    WDTCSR |= (1 << WDIE);
-
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-    sleep_cpu();
-    sleep_disable();
-    
-    // Fix millis() timing drift
-    noInterrupts();
-    timer0_millis += 4000;
-    interrupts();
-  }
-
-  while (sec >= 1) {
-    sec -= 1;
-    wdt_enable(WDTO_1S);
-    WDTCSR |= (1 << WDIE);
-
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-    sleep_cpu();
-    sleep_disable();
-    
-    noInterrupts();
-    timer0_millis += 1000;
-    interrupts();
-  }
-
-  // Re-enable ADC
-  ADCSRA |= (1 << ADEN);
-}
-
-// Watchdog timer interrupt service routine
-ISR(WDT_vect) {
+void setup(){
   wdt_disable();
-}
-int rinse(){
-  long StartTime = millis();
-  Serial.println("Rinsing Time Baby!");
-  analogWrite(SPEED, MIN);
-  digitalWrite(PUMP_REV_PIN, HIGH);
-  digitalWrite(SWA, HIGH);
-  digitalWrite(HALL_SENSOR_PIN, HIGH);
-  int RevCounter = 0;
-
-  while (digitalRead(4) == 0) {
-    MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
-    MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
-    
-    // If the magnet is detected (strength is higher than Max threshold)
-    if (MagneticStrength > (MaxVal - 1)) {
-      RevCounter += 1; // Increment your revolution count
-      
-      // Wait in this small loop until the magnet moves away
-      // This ensures one physical spin = exactly one count
-      do {
-        MagneticStrength = analogRead(HALL_SENSOR_PIN) * 1.0;
-        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / 1024.0 * 100.0;
-      } while (MagneticStrength > (MinVal + 1));
-    }
-        
-    delay(1);
-  }
-  
-  // 3. SHUTDOWN AND RETURN
-  digitalWrite(PUMP_REV_PIN, LOW);
-  digitalWrite(HALL_SENSOR_PIN, LOW);
+  Serial.begin(BAUDRATE);
+  pinMode(PUMP_FWD_PIN, OUTPUT);
+  pinMode(PUMP_REV_PIN, OUTPUT);
+  pinMode(SWA, OUTPUT);
+  pinMode(SPEED, OUTPUT);
   digitalWrite(SWA, LOW);
-  Serial.println("Caliberation Done Baby!");
-  Serial.print("Rev: ");
-  RevCounter += 2;
-  Serial.println(RevCounter);
-  delay(5000);
-  SpinCounter = 0;
-  return (millis() - StartTime);
+  digitalWrite(PUMP_FWD_PIN, LOW);
+  digitalWrite(PUMP_REV_PIN, LOW);
+  pinMode(HALL_SENSOR_PIN, INPUT);
+  pinMode(XKC_SENSOR_PIN, INPUT);
+  digitalWrite(HALL_SENSOR_PIN, LOW);
+  digitalWrite(XKC_SENSOR_PIN, LOW);
+  Serial.println("GetMinsMaxs Started: ");
+  GetMinsMaxs();
+  Serial.println("GetMinsMaxs Ended: ");
+  delay(2000);
+  Serial.println("NoOfRevolutions Started: ");
+  revolutions = NoOfRevolutions();
+  Serial.println("NoOfRevolutions Ended: ");
+  Serial.println("Loop() Started: ");
 }
-long purge(int SpinTimes){
-      long StartTime;
-      StartTime = millis();
-      analogWrite(SPEED, MAX);
-      digitalWrite(PUMP_FWD_PIN, HIGH);
-      digitalWrite(SWA, HIGH);
-      delay(50);
-      digitalWrite(HALL_SENSOR_PIN, HIGH);
-      while (SpinCounter < SpinTimes){
-        MagneticStrength = analogRead(HALL_SENSOR_PIN)*1.0;
-        MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-        if(MagneticStrength > (MaxVal-1)){
-          SpinCounter += 1;
-          Serial.print(SpinCounter);
-          Serial.print(": ");
-          Serial.println(MagneticStrength);
-        
-          do{
-            MagneticStrength = analogRead(HALL_SENSOR_PIN);
-            MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
-          }while(MagneticStrength > (MinVal+1));
-        
-        }
-        
-        delay(1);
-      }
-      digitalWrite(PUMP_FWD_PIN, LOW);
-      digitalWrite(HALL_SENSOR_PIN, LOW);
-      digitalWrite(SWA, LOW);
 
-      SpinCounter = 0;
-      return (millis() - StartTime);
-    }
+void loop(){
+  for (int j = 0; j < CYCLES; j++){
+    Serial.print("Cycle Started: ");
+    SpinMeRev(2*revolutions);
+    delay(5000);
+    Rinse();
+    delay(5000);
+    SpinMeRev(2*revolutions);
+    delay(5000);
+    Rinse();
+    SpinMe((int)((TARGET/CYCLES)/ML_PER_REV));
+    SpinMeRev(2*revolutions);
+    Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    Serial.println("Cycle Ended");
+    Serial.print("Cycle Done: ");
+    Serial.println(j+1);
+    Serial.println("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+    Serial.flush(); // force the buffer out fully before anything else executes
+    delay(DELAY); // 30 second delay between cycles - no sleep for now
+
+  }
+  Serial.println("Finished Pumping");
+  Serial.print("Analog Reading: ");
+  Serial.println(digitalRead(XKC_SENSOR_PIN));
+  Serial.print("Done Target: ");
+  Serial.println(TARGET);
+  exit(0);
+}
