@@ -1454,7 +1454,7 @@ void xDelay(uint32_t ms) {
   // Flush serial so messages don't get cut off
   if (Serial) {
     Serial.flush();
-    delay(2);
+    delay(50);
   }
 
   // Calculate how many 64ms slices we can fit
@@ -1685,8 +1685,8 @@ bool Rinse() {
 int NoOfRevolutions() {
   unsigned long startTime = millis();
   Serial.println("Caliberation Time Baby!");
-  analogWrite(SPEED, reverse_speed);
-  digitalWrite(PUMP_REV_PIN, HIGH);
+  analogWrite(SPEED, forward_speed);
+  digitalWrite(PUMP_FWD_PIN, HIGH);
   digitalWrite(SWA, HIGH);
   
   int RevCounter = 0;
@@ -1711,7 +1711,7 @@ int NoOfRevolutions() {
   }
   
   // 3. SHUTDOWN AND RETURN
-  digitalWrite(PUMP_REV_PIN, LOW);
+  digitalWrite(PUMP_FWD_PIN, LOW);
   digitalWrite(SWA, LOW);
   Serial.println("Caliberation Done Baby!");
   Serial.print("Rev: ");
@@ -2351,6 +2351,11 @@ void loop() {
   } else {
     Serial.println(F("Rinse Failed"));
     sendAlertStandalone("200"); // Rinse Failed
+
+    Serial.println(F("RINSE FAILED. Sleeping until battery changed. "));
+    while (true) {
+      deepSleepSecs(8);
+    }
   }
 
   // ---------- Did we just reach the target? ----------
@@ -2366,7 +2371,11 @@ void loop() {
   unsigned long elapsed_ms = millis() - checkStart;
   if (elapsed_ms < interval_ms) {
     unsigned long remaining_sec = (interval_ms - elapsed_ms) / 1000;
-    if (remaining_sec > 0) deepSleepSecs(remaining_sec);
+    if (remaining_sec > 0) {
+      Serial.print(F("REMAINING SECS: "));
+      Serial.println(remaining_sec);
+      deepSleepSecs(remaining_sec);
+    }
   }
   // else: fall through — loop() re-enters and checks the web again at once
 }
