@@ -2328,23 +2328,23 @@ void loop() {
 
   if (!Rinse()) cycle_ok = false;
   else {
-    xDelay(5);
+    xDelay(5000);
     SpinMeRev(2 * revolutions);
-    xDelay(5);
+    xDelay(5000);
     if (!Rinse()) cycle_ok = false;
     else {
-      xDelay(5);
+      xDelay(5000);
       SpinMeRev(2 * revolutions);
-      xDelay(5);
+      xDelay(5000);
       if (!Rinse()) cycle_ok = false;
     }
   }
 
   if (cycle_ok) {
-    xDelay(5);
+    xDelay(5000);
     SpinMe((int)(ml_per_sample / ml_per_rev));
     currentML += ml_per_sample;
-    xDelay(5);
+    xDelay(5000);
     SpinMeRev(2 * revolutions);
     i++;
     logToWeb();
