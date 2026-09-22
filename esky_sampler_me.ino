@@ -125,6 +125,7 @@ bool hardResetSimCom();
 void deepSleepSecs(int32_t seconds);
 bool ReadAll();
 bool ReadState();
+bool waitForHttpAction(uint32_t timeout_ms);
 bool netReg(void);
 bool isSimComOn();
 bool hardPowerOffSimCom();
@@ -435,24 +436,12 @@ bool ReadState(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     readState = false;
     return false;
   }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    readState = false;
-    return false;
-  }
-
   // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
 
@@ -536,23 +525,11 @@ bool ReadMLSample(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
-  }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    return false;
-  }
-
-  // 6. Read the payload
+  }  // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
   char saved_response[CHARBUFF];
   strncpy(saved_response, response, CHARBUFF - 1);
@@ -624,23 +601,12 @@ bool ReadMLRev(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    return false;
-  }
-
-  // 6. Read the payload
+    // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
   char saved_response[CHARBUFF];
   strncpy(saved_response, response, CHARBUFF - 1);
@@ -712,22 +678,11 @@ bool ReadCycle(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    return false;
-  }
-
   // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
   char saved_response[CHARBUFF];
@@ -799,22 +754,11 @@ bool ReadTotalTargetVolume(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    return false;
-  }
-
   // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
   char saved_response [CHARBUFF];
@@ -889,22 +833,11 @@ bool ReadXDelay(){
     return false;
   }
 
-  // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
-
-  if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
-  }
-
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
-    return false;
-  }
-
   // 6. Read the payload
   sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
   char saved_response [CHARBUFF];
@@ -1346,20 +1279,18 @@ bool sendAlert(String message){
     return false;
   }
 
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
-  if (strstr(response, "ERROR")) {
-    return false; // if the response is ERROR, no need to continue
+  // 5. Wait for the +HTTPACTION URC
+  if (!waitForHttpAction(15000)) {
+    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
+    return false;
   }
 
-  // await the "200" response a bit longer to ensure http uploading is done
-  if (ret == false) {
-    sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15); // TODO: what is the best timeout?
-  }
-  
+  // 6. Wait for the session to become idle, then close it
   sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,0,0,0", 1000, 2);
   sendATcmd(F("AT+HTTPTERM"), "OK", 1000, 3);
   return true;
 }
+
 // bool parseCheck(){
 //   stopAllHardware();
 //   Parse();
@@ -2156,8 +2087,57 @@ int getMccmnc(char* mccmnc, size_t mccmnc_size){
     }
     return false;
 }
+// Wait for the "+HTTPACTION: 0,<code>,<len>" URC that the SIM7000 sends
+// asynchronously ~1-15 seconds after AT+HTTPACTION=0.
+// Returns true if <code> is 200 (success), false on timeout or error code.
+bool waitForHttpAction(uint32_t timeout_ms) {
+  unsigned long t0 = millis();
+  char urc[96] = {0};
+  uint8_t idx = 0;
 
+  while (millis() - t0 < timeout_ms) {
+    if (simCom.available()) {
+      char c = simCom.read();
+      if (idx < sizeof(urc) - 1) {
+        urc[idx++] = c;
+        urc[idx] = '\0';
+      }
 
+      // Look for a COMPLETE URC: "+HTTPACTION: 0,<code>,<len>\r\n"
+      char *p = strstr(urc, "+HTTPACTION:");
+      if (p != NULL) {
+        int method = 0, code = 0, len = 0;
+        int matched = sscanf(p, "+HTTPACTION: %d,%d,%d", &method, &code, &len);
+
+        // Require all three numbers AND a trailing newline in the buffer
+        // after the URC, which proves the line has finished arriving.
+        bool line_complete = (strchr(p, '\n') != NULL);
+
+        if (matched == 3 && line_complete) {
+          Serial.print(F("URC +HTTPACTION code="));
+          Serial.println(code);
+          return (code == 200);
+        }
+      }
+
+      // Bail early on a hard ERROR
+      if (strstr(urc, "\r\nERROR\r\n") != NULL) {
+        Serial.println(F("URC saw ERROR"));
+        return false;
+      }
+
+      // Prevent buffer overflow: keep the last ~56 bytes
+      if (idx >= sizeof(urc) - 1) {
+        memmove(urc, urc + 40, sizeof(urc) - 40);
+        idx = sizeof(urc) - 40;
+        urc[idx] = '\0';
+      }
+    }
+  }
+
+  Serial.println(F("waitForHttpAction: timeout"));
+  return false;
+}
 
 
 void setup(){
