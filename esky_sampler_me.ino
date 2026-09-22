@@ -436,7 +436,7 @@ bool ReadState(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     readState = false;
@@ -444,7 +444,7 @@ bool ReadState(){
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -537,14 +537,14 @@ bool ReadMLSample(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -625,14 +625,14 @@ bool ReadMLRev(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -713,14 +713,14 @@ bool ReadCycle(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -800,14 +800,14 @@ bool ReadTotalTargetVolume(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -890,14 +890,14 @@ bool ReadXDelay(){
   }
 
   // 5. Check for 200 OK
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
 
   if (ret == false) {
-    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15);
+    ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15);
   }
 
   if (ret == false) {
@@ -1346,14 +1346,14 @@ bool sendAlert(String message){
     return false;
   }
 
-  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 1);
+  ret = sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 1);
   if (strstr(response, "ERROR")) {
     return false; // if the response is ERROR, no need to continue
   }
 
   // await the "200" response a bit longer to ensure http uploading is done
   if (ret == false) {
-    sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPACTION: 0,200", 1000, 15); // TODO: what is the best timeout?
+    sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,200", 1000, 15); // TODO: what is the best timeout?
   }
   
   sendATcmd(F("AT+HTTPSTATUS?"), "+HTTPSTATUS: GET,0,0,0", 1000, 2);
@@ -1454,7 +1454,7 @@ void xDelay(uint32_t ms) {
   // Flush serial so messages don't get cut off
   if (Serial) {
     Serial.flush();
-    delay(50);
+    if (ms >= 100) delay(20);
   }
 
   // Calculate how many 64ms slices we can fit
