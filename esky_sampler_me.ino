@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <time.h>
+#include <math.h>
 #define BAUDRATE 9600
 #define PUMP_REV_PIN           2
 #define PUMP_FWD_PIN           3
@@ -2322,7 +2323,8 @@ void loop() {
 
   if (cycle_ok) {
     xDelay(5000);
-    SpinMe((int)(ml_per_sample / ml_per_rev));
+    int revs = (int) lround(ml_per_sample / ml_per_rev);
+    SpinMe(revs);
     currentML += ml_per_sample;
     xDelay(5000);
     SpinMeRev(2 * revolutions);
