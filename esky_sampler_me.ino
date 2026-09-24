@@ -438,7 +438,7 @@ bool ReadState(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     readState = false;
     return false;
@@ -527,7 +527,7 @@ bool ReadMLSample(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }  // 6. Read the payload
@@ -603,7 +603,7 @@ bool ReadMLRev(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
@@ -680,7 +680,7 @@ bool ReadCycle(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
@@ -756,7 +756,7 @@ bool ReadTotalTargetVolume(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
@@ -835,7 +835,7 @@ bool ReadXDelay(){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
@@ -1281,7 +1281,7 @@ bool sendAlert(String message){
   }
 
   // 5. Wait for the +HTTPACTION URC
-  if (!waitForHttpAction(15000)) {
+  if (!waitForHttpAction(45000)) {
     sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
     return false;
   }
@@ -1654,7 +1654,7 @@ int NoOfRevolutions() {
   return RevCounter;
 }
 
-long SpinMe(int SpinTimes){
+long SpinMe(int SpinTimes, bool countVolume = false){
       unsigned long StartTime;
       StartTime = millis();
       analogWrite(SPEED, forward_speed);
@@ -1666,6 +1666,7 @@ long SpinMe(int SpinTimes){
         MagneticStrength = sqrt((MagneticStrength - 512.0) * (MagneticStrength - 512.0)) / (1024)*100;
         if(MagneticStrength > (MaxVal-1)){
           SpinCounter += 1;
+          if(countVolume) currentML += ml_per_rev;
           Serial.print(SpinCounter);
           Serial.print(": ");
           Serial.println(MagneticStrength);
@@ -2324,8 +2325,7 @@ void loop() {
   if (cycle_ok) {
     xDelay(5000);
     int revs = (int) lround(ml_per_sample / ml_per_rev);
-    SpinMe(revs);
-    currentML += ml_per_sample;
+    SpinMe(revs, true);
     xDelay(5000);
     SpinMeRev(2 * revolutions);
     i++;
