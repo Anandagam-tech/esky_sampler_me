@@ -1215,7 +1215,9 @@ bool sendAlertStandalone(String message) {
   ret = netReg();
   if (!ret) { Serial.println(F("sendAlertStandalone: netReg failed")); goto cleanup; }
 
-  openbearer();
+  openbearer();`
+  CBCread();
+  CSQread();
   ret = sendAlert(message);
   closeBearer();
   netUnreg();
@@ -1244,8 +1246,8 @@ bool sendAlert(String message){
   alerts[sizeof(alerts)-1] = '\0';
   dataStr += alerts;
 
-  // dataStr += "&CBC=";
-  // dataStr += CBC;
+  dataStr += "&CBC=";
+  dataStr += CBC;
   // dataStr += "&ANGLE=";
   // dataStr += ANGLE;
   // dataStr += "&VEL=";
@@ -1256,8 +1258,8 @@ bool sendAlert(String message){
   // dataStr += FDIST;
   // dataStr += "&AMP=";
   // dataStr += AMP;
-  // dataStr += "&CSQ=";
-  // dataStr += CSQ;
+  dataStr += "&CSQ=";
+  dataStr += CSQ;
   // dataStr += "&AVEL=";
   // dataStr += AVEL;
   // // dataStr += "&AFDIST=";
