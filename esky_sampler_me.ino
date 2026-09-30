@@ -126,6 +126,7 @@ bool hardResetSimCom();
 void deepSleepSecs(int32_t seconds);
 bool ReadAll();
 bool ReadState();
+bool ReadCurrentML();
 bool waitForHttpAction(uint32_t timeout_ms);
 bool netReg(void);
 bool isSimComOn();
@@ -139,7 +140,7 @@ bool Rinse();
 bool RinseOnce();
 bool Retries();
 int NoOfRevolutions();
-long SpinMe(int);
+long SpinMe(int, bool countVolume = false);
 long SpinMeRev(int);
 void GetMinsMaxs();
 void initHardware();
@@ -370,6 +371,10 @@ bool ReadAll() {
     return false;
   }
   xDelay(500);
+  if(!ReadCurrentML()){
+    return false;
+  }
+  xDelay(500);
   if(!ReadMLSample()){
     sendAlert("500");
     return false;
@@ -484,6 +489,72 @@ bool ReadState(){
   readState = true;
   return true;
 
+}
+bool ReadCurrentML(){
+  if (readState == false){
+    return false;
+  }
+
+  dataStr = "AT+HTTPPARA=\"URL\",\"http://www.bosl.com.au/IoT/";
+  dataStr += SITE_DIR;
+  dataStr += "/scripts/ReadMe_v2.php?SiteName=";
+  dataStr += SITE_ID;
+  dataStr += ".csv&Key=";
+  dataStr += "currentML";
+  dataStr += "\"";
+
+  sendATcmd(F("AT+HTTPINIT"), "OK", 1000);
+  if (strstr(response, "ERROR")) return false;
+
+  sendATcmd(F("AT+HTTPPARA=\"CID\",1"), "OK", 1000);
+  if (strstr(response, "ERROR")) {
+    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
+    return false;
+  }
+
+  sendATcmd(dataStr, "OK", 2000);
+  if (strstr(response, "ERROR")) {
+    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
+    return false;
+  }
+
+  if (sendATcmd(F("AT+HTTPACTION=0"), "OK", 5000) == false) {
+    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
+    return false;
+  }
+
+  if (!waitForHttpAction(45000)) {
+    sendATcmd(F("AT+HTTPTERM"), "OK", 1000);
+    return false;
+  }
+
+  sendATcmd(F("AT+HTTPREAD"), "OK", 2000);
+  char saved_response[CHARBUFF];
+  strncpy(saved_response, response, CHARBUFF - 1);
+  saved_response[CHARBUFF - 1] = '\0';
+  sendATcmd(F("AT+HTTPTERM"), "OK", 1000, 3);
+
+  char *p = strstr(saved_response, "+HTTPREAD:");
+  if (p == NULL) return false;
+  p = strstr(p, "\r\n");
+  if (p == NULL) return false;
+  p += 2;
+
+  if (strstr(p,"error") != NULL || strlen(p) == 0){
+    return false;
+  }
+
+  char buffer[15];
+  int parsed = sscanf(p, "%[^\r\n]", buffer);
+  if (parsed != 1) return false;
+
+  float restored = atof(buffer);
+  if (restored < 0.0f || restored > 100000.0f) return false;
+
+  currentML = restored;
+  Serial.print(F("Restored currentML from server: "));
+  Serial.println(currentML);
+  return true;
 }
 bool ReadMLSample(){
   bool ret = false;
@@ -1215,7 +1286,7 @@ bool sendAlertStandalone(String message) {
   ret = netReg();
   if (!ret) { Serial.println(F("sendAlertStandalone: netReg failed")); goto cleanup; }
 
-  openbearer();`
+  openbearer();
   CBCread();
   CSQread();
   ret = sendAlert(message);
@@ -2285,6 +2356,11 @@ void loop() {
     deepSleepSecs(sleep_secs);           // fall back to whatever xdelay currently holds
     return;
   }
+  if (currentML >= totalTargetVolume) {
+    Serial.println(F("TARGET REACHED (restored). Sleeping until battery change."));
+    sendAlertStandalone("1000");
+    while (true) deepSleepSecs(8);
+}
 
   // xdelay now holds the interval from the server. Convert to ms once.
   unsigned long interval_ms = (unsigned long)xdelay * 1000UL;
